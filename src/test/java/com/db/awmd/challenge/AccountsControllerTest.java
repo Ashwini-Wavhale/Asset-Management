@@ -7,9 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
 
-import com.db.awmd.challenge.domain.Account;
-import com.db.awmd.challenge.service.AccountsService;
 import java.math.BigDecimal;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -20,6 +19,9 @@ import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.context.web.WebAppConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
+
+import com.db.awmd.challenge.domain.Account;
+import com.db.awmd.challenge.service.AccountsService;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest
@@ -114,4 +116,59 @@ public class AccountsControllerTest {
 	    this.mockMvc.perform(post("/v1/accounts/transfer/").contentType(MediaType.APPLICATION_JSON)
 	    	      .content("{\"accountFrom\":\"Id-360\",\"accountTo\":\"Id-361\",\"transferAmount\":100}")).andExpect(status().isAccepted());
   }
+  
+  @Test
+  public void makeTransferSameAccount() throws Exception {
+		
+	  	String accountIdFrom = "Id-360";
+	    Account accountFrom = new Account(accountIdFrom, new BigDecimal("123.45"));
+	    this.accountsService.createAccount(accountFrom);
+	    
+	    this.mockMvc.perform(post("/v1/accounts/transfer/").contentType(MediaType.APPLICATION_JSON)
+	    	      .content("{\"accountFrom\":\"Id-360\",\"accountTo\":\"Id-360\",\"transferAmount\":100}")).andExpect(status().isBadRequest());
+  }
+  
+  @Test
+  public void makeTransferNegativeAmount() throws Exception {
+		
+	  	String accountIdFrom = "Id-360";
+	    Account accountFrom = new Account(accountIdFrom, new BigDecimal("123.45"));
+	    this.accountsService.createAccount(accountFrom);
+	    String accountIdTo = "Id-361";
+	    Account accountTo = new Account(accountIdTo, new BigDecimal("123.45"));
+	    this.accountsService.createAccount(accountTo);
+	    
+	    this.mockMvc.perform(post("/v1/accounts/transfer/").contentType(MediaType.APPLICATION_JSON)
+	    	      .content("{\"accountFrom\":\"Id-360\",\"accountTo\":\"Id-361\",\"transferAmount\":-1.00}")).andExpect(status().isBadRequest());
+  }
+  
+  @Test
+  public void makeTransferEmptyBody() throws Exception {
+	  this.mockMvc.perform(post("/v1/accounts/transfer/").contentType(MediaType.APPLICATION_JSON)
+    	      .content("{}")).andExpect(status().isBadRequest());
+  }
+  
+  private void verifyAccountBalance(final String accountId, final BigDecimal balance) throws Exception {
+	    this.mockMvc.perform(get("/v1/accounts/" + accountId))
+	            .andExpect(status().isOk())
+	            .andExpect(
+	                    content().string("{\"accountId\":\"" + accountId + "\",\"balance\":"+balance+"}"));
+	  }
+  
+  @Test
+  public void makeTransferZeroBalanceAfterTransfer() throws Exception {
+	  	String accountIdFrom = "Id-360";
+	    Account accountFrom = new Account(accountIdFrom, new BigDecimal("100.00"));
+	    this.accountsService.createAccount(accountFrom);
+	    String accountIdTo = "Id-361";
+	    Account accountTo = new Account(accountIdTo, new BigDecimal("0"));
+	    this.accountsService.createAccount(accountTo);
+	    
+	    this.mockMvc.perform(post("/v1/accounts/transfer/").contentType(MediaType.APPLICATION_JSON)
+	    	      .content("{\"accountFrom\":\"Id-360\",\"accountTo\":\"Id-361\",\"transferAmount\":100.00}")).andExpect(status().isAccepted());
+
+	    verifyAccountBalance("Id-360", new BigDecimal("0.00"));
+	    verifyAccountBalance("Id-361", new BigDecimal("100.00"));
+  }
+  
 }

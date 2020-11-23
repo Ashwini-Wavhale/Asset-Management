@@ -2,17 +2,26 @@ package com.db.awmd.challenge;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.verify;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.junit4.SpringRunner;
 
 import com.db.awmd.challenge.domain.Account;
 import com.db.awmd.challenge.exception.DuplicateAccountIdException;
+import com.db.awmd.challenge.exception.NotEnoughBalanceException;
 import com.db.awmd.challenge.service.AccountsService;
-import java.math.BigDecimal;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.junit4.SpringRunner;
+import com.db.awmd.challenge.service.NotificationService;
 
+@ActiveProfiles("test")
 @RunWith(SpringRunner.class)
 @SpringBootTest
 public class AccountsServiceTest {
@@ -20,6 +29,9 @@ public class AccountsServiceTest {
   @Autowired
   private AccountsService accountsService;
 
+  @Autowired
+  private NotificationService notificationService;
+  
   @Test
   public void addAccount() throws Exception {
     Account account = new Account("Id-123");
@@ -94,5 +106,63 @@ public class AccountsServiceTest {
 	  	//Transaction will be rollBack and no debit will happen
 	    assertThat(this.accountsService.getAccount("Id-360").getBalance()).isEqualTo(new BigDecimal(1000));
 
+  }
+
+  @Test
+  public void amountTransfer_should_fail_when_accountNotEnoughFunds() {
+      final String accountFromId = UUID.randomUUID().toString();
+      final String accountToId = UUID.randomUUID().toString();
+      this.accountsService.createAccount(new Account(accountFromId));
+      this.accountsService.createAccount(new Account(accountToId));      
+      try {
+          this.accountsService.amountTransfer(accountFromId,accountToId,new BigDecimal(100));
+          fail("Should have failed because account does not have enough balance for the transfer");
+      } catch (NotEnoughBalanceException nbe) {
+          assertThat(nbe.getMessage()).isEqualTo("Insufficient balance in account");
+      }
+  }
+  
+  @Test
+  public void amountTransfer_should_transferFunds() {
+      final String accountFromId = UUID.randomUUID().toString();
+      final String accountToId = UUID.randomUUID().toString();
+      final Account accountFrom = new Account(accountFromId, new BigDecimal("500.99"));
+      final Account accountTo = new Account(accountToId, new BigDecimal("20.00"));
+      final BigDecimal transferAmount = new BigDecimal("200.99");
+      
+      this.accountsService.createAccount(accountFrom);
+      this.accountsService.createAccount(accountTo);
+
+      this.accountsService.amountTransfer(accountFromId,accountToId,transferAmount);
+      
+      assertThat(this.accountsService.getAccount(accountFromId).getBalance()).isEqualTo(new BigDecimal("300.00"));
+      assertThat(this.accountsService.getAccount(accountToId).getBalance()).isEqualTo(new BigDecimal("220.99"));
+
+      verifyNotifications(accountFrom, accountTo, transferAmount);
+  }
+  
+  @Test
+  public void amountTransfer_should_transferFunds_when_balanceJustEnough() {
+
+      final String accountFromId = UUID.randomUUID().toString();
+      final String accountToId = UUID.randomUUID().toString();
+      final Account accountFrom = new Account(accountFromId, new BigDecimal("100.01"));
+      final Account accountTo = new Account(accountToId, new BigDecimal("20.00"));
+      final BigDecimal transferAmount = new BigDecimal("100.01");
+
+      this.accountsService.createAccount(accountFrom);
+      this.accountsService.createAccount(accountTo);      
+
+      this.accountsService.amountTransfer(accountFromId,accountToId,transferAmount);
+
+      assertThat(this.accountsService.getAccount(accountFromId).getBalance()).isEqualTo(new BigDecimal("0.00"));
+      assertThat(this.accountsService.getAccount(accountToId).getBalance()).isEqualTo(new BigDecimal("120.01"));
+
+      verifyNotifications(accountFrom, accountTo, transferAmount);
+  }
+  
+  private void verifyNotifications(final Account accountFrom, final Account accountTo, final BigDecimal amount) {
+      verify(notificationService, Mockito.times(1)).notifyAboutTransfer(accountFrom, "The transfer to the account with ID " + accountTo.getAccountId() + " is now complete for the amount of " + amount + ".");
+      verify(notificationService, Mockito.times(1)).notifyAboutTransfer(accountTo, "The account with ID + " + accountFrom.getAccountId() + " has transferred " + amount + " into your account.");
   }
 }
