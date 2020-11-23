@@ -13,25 +13,25 @@ How to run
 Build the project using gradle. From project root:
 
 ```
-./gradlew clean build
+gradlew clean build
 ```
 
 Once the project is built, you can run the jar as follows:
 
 ```
-java -jar build/libs/Java\ Challenge-0.0.1-SNAPSHOT.jar
+java -jar build/libs/AssetManagement-0.0.1-SNAPSHOT.jar
 ```
 
 Example request:
 
 ```
-curl -i -X PUT \
-   -H "Content-Type:application/json" \
+curl -i -X POST \
+-H "Content-Type:application/json" \
    -d \
 '{
-  "accountFromId":"Id-1",
-  "accountToId":"Id-2",
-  "amount": "1.55"
+  "accountFrom":"Id-1",
+  "accountTo":"Id-2",
+  "transferAmount": "1.55"
 }' \
  'http://localhost:18080/v1/accounts/transfer'
 ```
